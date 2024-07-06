@@ -2,6 +2,7 @@
 using Microsoft.Extensions.Logging;
 using System.Text.Json;
 using TribalSentry.Bot.Models;
+using System.Collections.Concurrent;
 using Monitor = TribalSentry.Bot.Models.Monitor;
 
 namespace TribalSentry.Bot.Services
@@ -12,8 +13,8 @@ namespace TribalSentry.Bot.Services
         private readonly DiscordSocketClient _client;
         private readonly ILogger<MonitorService> _logger;
         private List<Monitor> _monitors = new List<Monitor>();
-        private readonly Dictionary<string, HashSet<int>> _knownVillages = new Dictionary<string, HashSet<int>>();
-        private bool _isInitialLoad = true;
+        private readonly ConcurrentDictionary<string, HashSet<int>> _knownVillages = new ConcurrentDictionary<string, HashSet<int>>();
+        private readonly ConcurrentDictionary<string, bool> _isInitialLoad = new ConcurrentDictionary<string, bool>();
         private const string MonitorsFilePath = "monitors.json";
 
         public MonitorService(TribalWarsApiService apiService, DiscordSocketClient client, ILogger<MonitorService> logger)
@@ -32,13 +33,6 @@ namespace TribalSentry.Bot.Services
                 {
                     await CheckForVillageChangesAsync(monitor);
                 }
-
-                if (_isInitialLoad)
-                {
-                    _isInitialLoad = false;
-                    _logger.LogInformation("Initial village load completed.");
-                }
-
                 await Task.Delay(TimeSpan.FromMinutes(5), cancellationToken);
             }
         }
@@ -46,8 +40,9 @@ namespace TribalSentry.Bot.Services
         public void AddMonitor(Monitor monitor)
         {
             _monitors.Add(monitor);
-            _knownVillages[$"{monitor.Market}_{monitor.WorldName}"] = new HashSet<int>();
-            _isInitialLoad = true;
+            var key = GetMonitorKey(monitor);
+            _knownVillages.TryAdd(key, new HashSet<int>());
+            _isInitialLoad[key] = true;
             SaveMonitors();
         }
 
@@ -57,7 +52,9 @@ namespace TribalSentry.Bot.Services
             if (monitor != null)
             {
                 _monitors.Remove(monitor);
-                _knownVillages.Remove($"{monitor.Market}_{monitor.WorldName}");
+                var key = GetMonitorKey(monitor);
+                _knownVillages.TryRemove(key, out _);
+                _isInitialLoad.TryRemove(key, out _);
                 SaveMonitors();
             }
         }
@@ -67,7 +64,20 @@ namespace TribalSentry.Bot.Services
             var index = _monitors.FindIndex(m => m.Id == id);
             if (index != -1)
             {
+                var oldMonitor = _monitors[index];
+                var oldKey = GetMonitorKey(oldMonitor);
+                var newKey = GetMonitorKey(updatedMonitor);
+
                 _monitors[index] = updatedMonitor;
+
+                if (oldKey != newKey)
+                {
+                    _knownVillages.TryRemove(oldKey, out _);
+                    _isInitialLoad.TryRemove(oldKey, out _);
+                    _knownVillages.TryAdd(newKey, new HashSet<int>());
+                    _isInitialLoad[newKey] = true;
+                }
+
                 SaveMonitors();
             }
         }
@@ -101,10 +111,11 @@ namespace TribalSentry.Bot.Services
                     _monitors = JsonSerializer.Deserialize<List<Monitor>>(json);
                     _logger.LogInformation($"Loaded {_monitors.Count} monitors from file.");
 
-                    // Initialize _knownVillages for each loaded monitor
                     foreach (var monitor in _monitors)
                     {
-                        _knownVillages[$"{monitor.Market}_{monitor.WorldName}"] = new HashSet<int>();
+                        var key = GetMonitorKey(monitor);
+                        _knownVillages.TryAdd(key, new HashSet<int>());
+                        _isInitialLoad[key] = true;
                     }
                 }
                 catch (Exception ex)
@@ -121,105 +132,66 @@ namespace TribalSentry.Bot.Services
         }
 
         private async Task CheckForVillageChangesAsync(Monitor monitor)
-    {
-        try
         {
-            var allVillages = await _apiService.GetAllVillagesAsync(monitor.Market, monitor.WorldName);
-            _logger.LogInformation($"Fetched {allVillages.Count()} villages for {monitor.Market} {monitor.WorldName}");
-
-            var barbarianVillages = allVillages.Where(v => v.PlayerId == 0).ToList();
-            _logger.LogInformation($"Found {barbarianVillages.Count} barbarian villages");
-
-            var filteredBarbarianVillages = barbarianVillages
-                .Where(v => v.Points >= monitor.MinPoints &&
-                            (string.IsNullOrEmpty(monitor.Continent) || v.Continent.ToLower() == monitor.Continent.ToLower()))
-                .ToList();
-            _logger.LogInformation($"Filtered to {filteredBarbarianVillages.Count} barbarian villages meeting criteria");
-
-            var key = $"{monitor.Market}_{monitor.WorldName}_{monitor.Continent}";
-
-            if (!_knownVillages.ContainsKey(key))
+            try
             {
-                _knownVillages[key] = new HashSet<int>();
-                _isInitialLoad = true;
-            }
+                var barbarianVillages = await _apiService.GetBarbarianVillagesAsync(monitor.Market, monitor.WorldName, monitor.Continent);
+                _logger.LogInformation($"Fetched {barbarianVillages.Count()} barbarian villages for {monitor.Market} {monitor.WorldName} {monitor.Continent}");
 
-            _logger.LogInformation($"Known villages for {key}: {_knownVillages[key].Count}");
+                var filteredVillages = barbarianVillages
+                    .Where(v => v.Points >= monitor.MinPoints)
+                    .ToList();
 
-            if (_isInitialLoad)
-            {
-                // During initial load, just add all villages to known list without notifications
-                foreach (var village in filteredBarbarianVillages)
-                {
-                    _knownVillages[key].Add(village.Id);
-                    _logger.LogDebug($"Added village to known list: ID={village.Id}, X={village.X}, Y={village.Y}, Points={village.Points}, Continent={village.Continent}");
-                }
-                _logger.LogInformation($"Initial load: Added {filteredBarbarianVillages.Count} villages to known list for {key}");
-                _isInitialLoad = false;
-            }
-            else
-            {
-                // Check for new barbarian villages
-                var newVillages = filteredBarbarianVillages.Where(v => !_knownVillages[key].Contains(v.Id)).ToList();
-                _logger.LogInformation($"Found {newVillages.Count} new barbarian villages");
+                _logger.LogInformation($"Filtered to {filteredVillages.Count} villages meeting criteria");
 
+                var key = GetMonitorKey(monitor);
+                var knownVillages = _knownVillages.GetOrAdd(key, new HashSet<int>());
+                var isInitialLoad = _isInitialLoad.GetOrAdd(key, true);
+
+                var newVillages = filteredVillages.Where(v => !knownVillages.Contains(v.Id)).ToList();
                 foreach (var village in newVillages)
                 {
-                    _knownVillages[key].Add(village.Id);
-                    _logger.LogInformation($"New barbarian village: ID={village.Id}, X={village.X}, Y={village.Y}, Points={village.Points}, PlayerId={village.PlayerId}");
-                    await NotifyNewBarbarianVillageAsync(monitor, village);
+                    knownVillages.Add(village.Id);
+                    _logger.LogInformation($"New barbarian village: ID={village.Id}, X={village.X}, Y={village.Y}, Points={village.Points}");
+                    if (!isInitialLoad)
+                    {
+                        await NotifyNewBarbarianVillageAsync(monitor, village);
+                    }
                 }
 
-                // Check for villages that are no longer in the list or no longer barbarian
-                var villagesChanged = _knownVillages[key].Where(id => !filteredBarbarianVillages.Any(v => v.Id == id)).ToList();
-                _logger.LogInformation($"Found {villagesChanged.Count} villages that changed status");
-
-                foreach (var villageId in villagesChanged)
+                // Remove villages that are no longer barbarian or don't meet criteria
+                var villagesToRemove = knownVillages.Except(filteredVillages.Select(v => v.Id)).ToList();
+                foreach (var villageId in villagesToRemove)
                 {
-                    var village = allVillages.FirstOrDefault(v => v.Id == villageId);
-                    if (village == null)
-                    {
-                        _logger.LogWarning($"Village with ID {villageId} not found in allVillages list. It may have been deleted or there might be an API inconsistency.");
-                        _knownVillages[key].Remove(villageId);
-                    }
-                    else if (village.PlayerId != 0)
-                    {
-                        _logger.LogInformation($"Village conquered: ID={village.Id}, X={village.X}, Y={village.Y}, Points={village.Points}, NewPlayerId={village.PlayerId}");
-                        _knownVillages[key].Remove(villageId);
-                        await NotifyConqueredBarbarianVillageAsync(monitor, village);
-                    }
-                    else
-                    {
-                        _logger.LogWarning($"Village with ID {villageId} is still barbarian but no longer meets filter criteria: Points={village.Points}, Continent={village.Continent}");
-                        _knownVillages[key].Remove(villageId);
-                    }
+                    knownVillages.Remove(villageId);
+                    _logger.LogInformation($"Removed village with ID {villageId} from tracking");
+                }
+
+                _logger.LogInformation($"After processing, tracking {knownVillages.Count} villages for {key}");
+
+                if (isInitialLoad)
+                {
+                    _isInitialLoad[key] = false;
+                    _logger.LogInformation($"Initial load completed for {key}");
                 }
             }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, $"Error checking for village changes: {ex.Message}");
+            }
+        }
 
-            _logger.LogInformation($"After processing, known villages for {key}: {_knownVillages[key].Count}");
-        }
-        catch (Exception ex)
+        private string GetMonitorKey(Monitor monitor)
         {
-            _logger.LogError(ex, $"Error checking for village changes: {ex.Message}");
+            return $"{monitor.Market}_{monitor.WorldName}_{monitor.Continent?.ToLower() ?? "all"}";
         }
-    }
 
         private async Task NotifyNewBarbarianVillageAsync(Monitor monitor, Village village)
         {
             var channel = _client.GetChannel((ulong)monitor.ChannelId) as ISocketMessageChannel;
             if (channel != null)
             {
-                var message = $"New barbarian village: Points: {village.Points} Link: [{village.X}|{village.Y}](https://{monitor.WorldName}.{monitor.Market}/game.php?screen=info_village&id={village.Id})";
-                await channel.SendMessageAsync(message);
-            }
-        }
-
-        private async Task NotifyConqueredBarbarianVillageAsync(Monitor monitor, Village village)
-        {
-            var channel = _client.GetChannel((ulong)monitor.ChannelId) as ISocketMessageChannel;
-            if (channel != null)
-            {
-                var message = $"Barbarian village conquered: Points: {village.Points} Link: [{village.X}|{village.Y}](https://{monitor.WorldName}.{monitor.Market}/game.php?screen=info_village&id={village.Id})";
+                var message = $"New barbarian village in {monitor.WorldName} {monitor.Continent}: Points: {village.Points} Link: [{village.X}|{village.Y}](https://{monitor.WorldName}.{monitor.Market}/game.php?screen=info_village&id={village.Id})";
                 await channel.SendMessageAsync(message);
             }
         }

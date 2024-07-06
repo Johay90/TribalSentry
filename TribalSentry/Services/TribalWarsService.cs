@@ -27,7 +27,6 @@ namespace TribalSentry.API.Services
             var content = await FetchContentAsync(world, "village.txt");
             return ParseVillages(content);
         }
-
         public async Task<IEnumerable<Village>> GetBarbarianVillagesAsync(World world, string continent = null)
         {
             var content = await FetchContentAsync(world, "village.txt");
@@ -39,7 +38,7 @@ namespace TribalSentry.API.Services
 
             if (!string.IsNullOrEmpty(continent))
             {
-                barbarianVillages = barbarianVillages.Where(v => 
+                barbarianVillages = barbarianVillages.Where(v =>
                     v.Continent.Equals(continent, StringComparison.OrdinalIgnoreCase)).ToList();
                 _logger.LogInformation($"Filtered to {barbarianVillages.Count} barbarian villages in continent {continent}");
             }
@@ -145,8 +144,8 @@ namespace TribalSentry.API.Services
 
         private string CalculateContinent(int x, int y)
         {
-            int kx = (x / 100);
-            int ky = (y / 100);
+            int kx = x / 100;
+            int ky = y / 100;
             return $"K{kx}{ky}";
         }
 

@@ -23,17 +23,12 @@ public class TribalWarsApiService
 
     public async Task<IEnumerable<Village>> GetBarbarianVillagesAsync(string market, string worldName, string continent = null)
     {
-        var allVillages = await GetAllVillagesAsync(market, worldName);
-        var barbarianVillages = new List<Village>();
-
-        foreach (var village in allVillages)
+        var query = $"api/tribalwars/barbarian-villages?market={market}&worldName={worldName}";
+        if (!string.IsNullOrEmpty(continent))
         {
-            if (village.PlayerId == 0 && (string.IsNullOrEmpty(continent) || village.Continent == continent))
-            {
-                barbarianVillages.Add(village);
-            }
+            query += $"&continent={continent}";
         }
-
-        return barbarianVillages;
+        var response = await _httpClient.GetFromJsonAsync<IEnumerable<Village>>(query);
+        return response ?? new List<Village>();
     }
 }
