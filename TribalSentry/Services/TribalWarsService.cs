@@ -146,7 +146,7 @@ namespace TribalSentry.API.Services
         {
             int kx = x / 100;
             int ky = y / 100;
-            return $"K{kx}{ky}";
+            return $"K{ky}{kx}";
         }
 
         private IEnumerable<Player> ParsePlayers(string content)
