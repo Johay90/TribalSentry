@@ -32,7 +32,7 @@ TribalSentry is a comprehensive solution for monitoring Tribal Wars game data, c
    ```
    dotnet run --project TribalSentry.API
    ```
-The API should now be running on `https://localhost:7171`.
+The API should now be running on `https://localhost:5000`.
 
 ### API Endpoints
 - `GET /api/tribalwars/villages`: Get all villages
@@ -45,7 +45,7 @@ For full details on query parameters, please refer to the API documentation.
 ### Example Usage
 Fetch barbarian villages in continent K55 for the UK market, world 1:
 ```
-GET https://localhost:7171/api/tribalwars/barbarian-villages?market=tribalwars.co.uk&worldName=uk1&continent=K55
+GET https://localhost:5000/api/tribalwars/barbarian-villages?market=tribalwars.co.uk&worldName=uk1&continent=K55
 ```
 
 ## TribalSentry Discord Bot
