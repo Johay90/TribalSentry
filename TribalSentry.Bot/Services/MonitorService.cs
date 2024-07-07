@@ -227,35 +227,43 @@ namespace TribalSentry.Bot.Services
         private async Task<bool> ConfirmBarbarianVillageAsync(Monitor monitor, Village village)
         {
             // First check: Verify with GetAllVillages
-            var allVillages = await _apiService.GetAllVillagesAsync(monitor.Market, monitor.WorldName);
-            var villageInAll = allVillages.FirstOrDefault(v => v.Id == village.Id);
-            if (villageInAll == null || villageInAll.PlayerId != 0)
-            {
-                _logger.LogWarning($"Village ID={village.Id} is not a barbarian village in all villages list");
-                return false;
-            }
+            var key = GetMonitorKey(monitor);
+            var isInitialLoad = _isInitialLoad.GetOrAdd(key, true);
 
-            // Second check: Wait and verify again
-            await Task.Delay(TimeSpan.FromSeconds(30));
-
-            var barbarianVillagesAfterDelay = await _apiService.GetBarbarianVillagesAsync(monitor.Market, monitor.WorldName, monitor.Continent);
-            var villageAfterDelay = barbarianVillagesAfterDelay.FirstOrDefault(v => v.Id == village.Id);
-            if (villageAfterDelay == null || villageAfterDelay.PlayerId != 0)
+            if (!isInitialLoad)
             {
-                _logger.LogWarning($"Village ID={village.Id} is no longer a barbarian village after delay");
-                return false;
+                var allVillages = await _apiService.GetAllVillagesAsync(monitor.Market, monitor.WorldName);
+                var villageInAll = allVillages.FirstOrDefault(v => v.Id == village.Id);
+                if (villageInAll == null || villageInAll.PlayerId != 0)
+                {
+                    _logger.LogWarning($"Village ID={village.Id} is not a barbarian village in all villages list");
+                    return false;
+                }
+
+                // Second check: Wait and verify again
+                await Task.Delay(TimeSpan.FromSeconds(30));
+
+                var barbarianVillagesAfterDelay = await _apiService.GetBarbarianVillagesAsync(monitor.Market, monitor.WorldName, monitor.Continent);
+                var villageAfterDelay = barbarianVillagesAfterDelay.FirstOrDefault(v => v.Id == village.Id);
+                if (villageAfterDelay == null || villageAfterDelay.PlayerId != 0)
+                {
+                    _logger.LogWarning($"Village ID={village.Id} is no longer a barbarian village after delay");
+                    return false;
+                }
+
             }
 
             return true;
         }
 
-        private async Task<List<Village>> GetCurrentBarbarianVillagesAsync(Monitor monitor)
+        public async Task<List<Village>> GetCurrentBarbarianVillagesAsync(Monitor monitor)
         {
             var key = GetMonitorKey(monitor);
             var knownVillages = _knownVillages.GetOrAdd(key, new HashSet<int>());
             var barbarianVillages = await _apiService.GetBarbarianVillagesAsync(monitor.Market, monitor.WorldName, monitor.Continent);
             return barbarianVillages.Where(v => knownVillages.Contains(v.Id)).ToList();
         }
+        
     }
 
 
