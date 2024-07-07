@@ -4,6 +4,7 @@ using System.Text.Json;
 using TribalSentry.Bot.Models;
 using System.Collections.Concurrent;
 using Monitor = TribalSentry.Bot.Models.Monitor;
+using Discord;
 
 namespace TribalSentry.Bot.Services
 {
@@ -141,7 +142,6 @@ namespace TribalSentry.Bot.Services
                 var filteredVillages = barbarianVillages
                     .Where(v => v.Points >= monitor.MinPoints)
                     .ToList();
-
                 _logger.LogInformation($"Filtered to {filteredVillages.Count} villages meeting criteria");
 
                 var key = GetMonitorKey(monitor);
@@ -149,13 +149,20 @@ namespace TribalSentry.Bot.Services
                 var isInitialLoad = _isInitialLoad.GetOrAdd(key, true);
 
                 var newVillages = filteredVillages.Where(v => !knownVillages.Contains(v.Id)).ToList();
+                var confirmedNewVillages = new List<Village>();
+
                 foreach (var village in newVillages)
                 {
-                    knownVillages.Add(village.Id);
-                    _logger.LogInformation($"New barbarian village: ID={village.Id}, X={village.X}, Y={village.Y}, Points={village.Points}");
-                    if (!isInitialLoad)
+                    if (await ConfirmBarbarianVillageAsync(monitor, village))
                     {
-                        await NotifyNewBarbarianVillageAsync(monitor, village);
+                        confirmedNewVillages.Add(village);
+                        knownVillages.Add(village.Id);
+                        _logger.LogInformation($"Confirmed new barbarian village: ID={village.Id}, X={village.X}, Y={village.Y}, Points={village.Points}");
+
+                        if (!isInitialLoad)
+                        {
+                            await NotifyNewBarbarianVillageAsync(monitor, village);
+                        }
                     }
                 }
 
@@ -191,9 +198,65 @@ namespace TribalSentry.Bot.Services
             var channel = _client.GetChannel((ulong)monitor.ChannelId) as ISocketMessageChannel;
             if (channel != null)
             {
-                var message = $"New barbarian village in {monitor.WorldName} {monitor.Continent}: Points: {village.Points} Link: [{village.X}|{village.Y}](https://{monitor.WorldName}.{monitor.Market}/game.php?screen=info_village&id={village.Id})";
-                await channel.SendMessageAsync(message);
+                var embed = new EmbedBuilder()
+                    .WithTitle("🏰 New Barbarian Village Discovered!")
+                    .WithDescription($"A new barbarian village has been found in **{monitor.WorldName}** ({monitor.Continent}).")
+                    .WithColor(Color.Green)
+                    .WithTimestamp(DateTimeOffset.UtcNow)
+                    .WithFields(
+                        new EmbedFieldBuilder().WithName("Coordinates").WithValue($"[{village.X}|{village.Y}](https://{monitor.WorldName}.{monitor.Market}/game.php?screen=info_village&id={village.Id})").WithIsInline(true),
+                        new EmbedFieldBuilder().WithName("Points").WithValue(village.Points).WithIsInline(true),
+                        new EmbedFieldBuilder().WithName("Village ID").WithValue(village.Id).WithIsInline(true)
+                    )
+                    .WithFooter(footer => footer.Text = $"TribalSentry Bot • Monitor: {monitor.Id}")
+                    .Build();
+
+                // Generate and upload JSON file
+                var jsonFileName = $"barb_villages_{monitor.WorldName}_{monitor.Continent}.json";
+                var jsonFilePath = Path.Combine(Path.GetTempPath(), jsonFileName);
+                var barbarianVillages = await GetCurrentBarbarianVillagesAsync(monitor);
+                await File.WriteAllTextAsync(jsonFilePath, JsonSerializer.Serialize(barbarianVillages, new JsonSerializerOptions { WriteIndented = true }));
+
+                await channel.SendFileAsync(jsonFilePath, embed: embed);
+
+                // Clean up the temporary file
+                File.Delete(jsonFilePath);
             }
         }
+
+        private async Task<bool> ConfirmBarbarianVillageAsync(Monitor monitor, Village village)
+        {
+            // First check: Verify with GetAllVillages
+            var allVillages = await _apiService.GetAllVillagesAsync(monitor.Market, monitor.WorldName);
+            var villageInAll = allVillages.FirstOrDefault(v => v.Id == village.Id);
+            if (villageInAll == null || villageInAll.PlayerId != 0)
+            {
+                _logger.LogWarning($"Village ID={village.Id} is not a barbarian village in all villages list");
+                return false;
+            }
+
+            // Second check: Wait and verify again
+            await Task.Delay(TimeSpan.FromSeconds(30));
+
+            var barbarianVillagesAfterDelay = await _apiService.GetBarbarianVillagesAsync(monitor.Market, monitor.WorldName, monitor.Continent);
+            var villageAfterDelay = barbarianVillagesAfterDelay.FirstOrDefault(v => v.Id == village.Id);
+            if (villageAfterDelay == null || villageAfterDelay.PlayerId != 0)
+            {
+                _logger.LogWarning($"Village ID={village.Id} is no longer a barbarian village after delay");
+                return false;
+            }
+
+            return true;
+        }
+
+        private async Task<List<Village>> GetCurrentBarbarianVillagesAsync(Monitor monitor)
+        {
+            var key = GetMonitorKey(monitor);
+            var knownVillages = _knownVillages.GetOrAdd(key, new HashSet<int>());
+            var barbarianVillages = await _apiService.GetBarbarianVillagesAsync(monitor.Market, monitor.WorldName, monitor.Continent);
+            return barbarianVillages.Where(v => knownVillages.Contains(v.Id)).ToList();
+        }
     }
+
+
 }

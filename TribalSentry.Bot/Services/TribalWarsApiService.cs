@@ -1,34 +1,53 @@
 ﻿using System.Net.Http.Json;
 using TribalSentry.Bot.Models;
+using Microsoft.Extensions.Logging;
 
 namespace TribalSentry.Bot.Services;
 
 public class TribalWarsApiService
 {
     private readonly HttpClient _httpClient;
+    private readonly ILogger<TribalWarsApiService> _logger;
 
-    public TribalWarsApiService()
+    public TribalWarsApiService(ILogger<TribalWarsApiService> logger)
     {
         _httpClient = new HttpClient
         {
-            BaseAddress = new Uri("https://localhost:7171/")
+            BaseAddress = new Uri("http://localhost:5000/")
         };
+        _logger = logger;
     }
 
     public async Task<IEnumerable<Village>> GetAllVillagesAsync(string market, string worldName)
     {
-        var response = await _httpClient.GetFromJsonAsync<IEnumerable<Village>>($"api/tribalwars/villages?market={market}&worldName={worldName}");
-        return response ?? new List<Village>();
+        try
+        {
+            var response = await _httpClient.GetFromJsonAsync<IEnumerable<Village>>($"api/tribalwars/villages?market={market}&worldName={worldName}");
+            return response ?? new List<Village>();
+        }
+        catch (HttpRequestException ex)
+        {
+            _logger.LogError(ex, "Error fetching villages from API");
+            return new List<Village>();
+        }
     }
 
     public async Task<IEnumerable<Village>> GetBarbarianVillagesAsync(string market, string worldName, string continent = null)
     {
-        var query = $"api/tribalwars/barbarian-villages?market={market}&worldName={worldName}";
-        if (!string.IsNullOrEmpty(continent))
+        try
         {
-            query += $"&continent={continent}";
+            var query = $"api/tribalwars/barbarian-villages?market={market}&worldName={worldName}";
+            if (!string.IsNullOrEmpty(continent))
+            {
+                query += $"&continent={continent}";
+            }
+            var response = await _httpClient.GetFromJsonAsync<IEnumerable<Village>>(query);
+            return response ?? new List<Village>();
         }
-        var response = await _httpClient.GetFromJsonAsync<IEnumerable<Village>>(query);
-        return response ?? new List<Village>();
+        catch (HttpRequestException ex)
+        {
+            _logger.LogError(ex, "Error fetching barbarian villages from API");
+            return new List<Village>();
+        }
     }
 }
