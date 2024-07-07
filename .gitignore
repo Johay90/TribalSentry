@@ -362,3 +362,7 @@ MigrationBackup/
 # Fody - auto-generated XML schema
 FodyWeavers.xsd
 /TribalSentry.Bot/appsettings.json
+/TribalSentry/.config
+/appsettings.example.json
+/appsettings.json
+/TribalSentry.Bot.runtimeconfig.json
