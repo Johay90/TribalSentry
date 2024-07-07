@@ -50,4 +50,10 @@ public class TribalWarsApiService
             return new List<Village>();
         }
     }
+
+    public async Task<IEnumerable<Conquer>> GetConquersAsync(string market, string worldName)
+    {
+        var response = await _httpClient.GetFromJsonAsync<IEnumerable<Conquer>>($"api/tribalwars/conquers?market={market}&worldName={worldName}");
+        return response ?? new List<Conquer>();
+    }
 }

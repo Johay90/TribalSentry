@@ -34,7 +34,7 @@ namespace TribalSentry.Bot.Services
                 {
                     await CheckForVillageChangesAsync(monitor);
                 }
-                await Task.Delay(TimeSpan.FromMinutes(5), cancellationToken);
+                await Task.Delay(TimeSpan.FromMinutes(60), cancellationToken);
             }
         }
 
@@ -211,27 +211,18 @@ namespace TribalSentry.Bot.Services
                     .WithFooter(footer => footer.Text = $"TribalSentry Bot • Monitor: {monitor.Id}")
                     .Build();
 
-                // Generate and upload JSON file
-                var jsonFileName = $"barb_villages_{monitor.WorldName}_{monitor.Continent}.json";
-                var jsonFilePath = Path.Combine(Path.GetTempPath(), jsonFileName);
-                var barbarianVillages = await GetCurrentBarbarianVillagesAsync(monitor);
-                await File.WriteAllTextAsync(jsonFilePath, JsonSerializer.Serialize(barbarianVillages, new JsonSerializerOptions { WriteIndented = true }));
-
-                await channel.SendFileAsync(jsonFilePath, embed: embed);
-
-                // Clean up the temporary file
-                File.Delete(jsonFilePath);
+                await channel.SendMessageAsync(embed: embed);
             }
         }
 
         private async Task<bool> ConfirmBarbarianVillageAsync(Monitor monitor, Village village)
         {
-            // First check: Verify with GetAllVillages
             var key = GetMonitorKey(monitor);
             var isInitialLoad = _isInitialLoad.GetOrAdd(key, true);
 
             if (!isInitialLoad)
             {
+                // First check: Verify with GetAllVillages
                 var allVillages = await _apiService.GetAllVillagesAsync(monitor.Market, monitor.WorldName);
                 var villageInAll = allVillages.FirstOrDefault(v => v.Id == village.Id);
                 if (villageInAll == null || villageInAll.PlayerId != 0)
@@ -240,9 +231,8 @@ namespace TribalSentry.Bot.Services
                     return false;
                 }
 
-                // Second check: Wait and verify again
+                // Second check: Verify with GetBarbarianVillages after a delay
                 await Task.Delay(TimeSpan.FromSeconds(30));
-
                 var barbarianVillagesAfterDelay = await _apiService.GetBarbarianVillagesAsync(monitor.Market, monitor.WorldName, monitor.Continent);
                 var villageAfterDelay = barbarianVillagesAfterDelay.FirstOrDefault(v => v.Id == village.Id);
                 if (villageAfterDelay == null || villageAfterDelay.PlayerId != 0)
@@ -251,6 +241,16 @@ namespace TribalSentry.Bot.Services
                     return false;
                 }
 
+                // Third check: Verify against recent conquers
+                var conquers = await _apiService.GetConquersAsync(monitor.Market, monitor.WorldName);
+                var twelveHoursAgo = DateTimeOffset.UtcNow.AddHours(-12).ToUnixTimeSeconds();
+                var recentConquer = conquers.FirstOrDefault(c => c.VillageId == village.Id && c.Timestamp >= twelveHoursAgo);
+
+                if (recentConquer != null)
+                {
+                    _logger.LogWarning($"Village ID={village.Id} was recently conquered at {DateTimeOffset.FromUnixTimeSeconds(recentConquer.Timestamp)}");
+                    return false;
+                }
             }
 
             return true;
@@ -263,7 +263,7 @@ namespace TribalSentry.Bot.Services
             var barbarianVillages = await _apiService.GetBarbarianVillagesAsync(monitor.Market, monitor.WorldName, monitor.Continent);
             return barbarianVillages.Where(v => knownVillages.Contains(v.Id)).ToList();
         }
-        
+
     }
 
 
