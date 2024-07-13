@@ -103,17 +103,25 @@ namespace TribalSentry.Bot.Services
         private async Task HandleRemoveMonitorCommand(SocketSlashCommand command)
         {
             var id = (string)command.Data.Options.First(o => o.Name == "id").Value;
+            var monitor = _monitorService.GetMonitor(id);
+
+            if (monitor == null || monitor.ChannelId != command.ChannelId)
+            {
+                await command.RespondAsync("Monitor not found or you don't have permission to remove it.", ephemeral: true);
+                return;
+            }
+
             _monitorService.RemoveMonitor(id);
             await command.RespondAsync($"Monitor removed: {id}", ephemeral: true);
         }
 
         private async Task HandleViewMonitorsCommand(SocketSlashCommand command)
         {
-            var monitors = _monitorService.GetAllMonitors();
+            var monitors = _monitorService.GetAllMonitors().Where(m => m.ChannelId == command.ChannelId).ToList();
 
             if (monitors.Count == 0)
             {
-                await command.RespondAsync("There are no active monitors.", ephemeral: true);
+                await command.RespondAsync("There are no active monitors in this channel.", ephemeral: true);
                 return;
             }
 
@@ -130,30 +138,12 @@ namespace TribalSentry.Bot.Services
                     $"Market: {monitor.Market}\n" +
                     $"World: {monitor.WorldName}\n" +
                     $"Min Points: {monitor.MinPoints}\n" +
-                    $"Continent: {monitor.Continent ?? "All"}\n" +
-                    $"Channel: <#{monitor.ChannelId}>",
+                    $"Continent: {monitor.Continent ?? "All"}\n",
                     inline: false
                 );
             }
 
-            // Generate JSON file with known barbarian villages for all monitors
-            var jsonFileName = "known_barb_villages.json";
-            var jsonFilePath = Path.Combine(Path.GetTempPath(), jsonFileName);
-            var knownVillages = new Dictionary<string, List<Village>>();
-
-            foreach (var monitor in monitors)
-            {
-                var villages = await GetKnownBarbarianVillagesAsync(monitor);
-                knownVillages[monitor.Id] = villages;
-            }
-
-            await File.WriteAllTextAsync(jsonFilePath, JsonSerializer.Serialize(knownVillages, new JsonSerializerOptions { WriteIndented = true }));
-
-            // Send the embed and file
-            await command.RespondWithFileAsync(jsonFilePath, embed: embed.Build(), ephemeral: true);
-
-            // Clean up the temporary file
-            File.Delete(jsonFilePath);
+            await command.RespondAsync(embed: embed.Build(), ephemeral: true);
         }
 
         private async Task<List<Village>> GetKnownBarbarianVillagesAsync(Monitor monitor)

@@ -26,6 +26,11 @@ namespace TribalSentry.Bot.Services
             LoadMonitors();
         }
 
+        public Monitor GetMonitor(string id)
+        {
+            return _monitors.FirstOrDefault(m => m.Id == id);
+        }
+
         public async Task StartMonitoringAsync(CancellationToken cancellationToken)
         {
             while (!cancellationToken.IsCancellationRequested)
