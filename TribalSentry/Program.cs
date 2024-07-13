@@ -7,7 +7,9 @@ builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();
 
 builder.Services.AddHttpClient();
+builder.Services.AddMemoryCache();
 builder.Services.AddScoped<ITribalWarsService, TribalWarsService>();
+builder.Services.AddScoped<TribalWarsCacheService>();
 
 var app = builder.Build();
 

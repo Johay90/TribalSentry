@@ -9,12 +9,12 @@ namespace TribalSentry.API.Controllers;
 [Route("api/[controller]")]
 public class TribalWarsController : ControllerBase
 {
-    private readonly ITribalWarsService _tribalWarsService;
+    private readonly TribalWarsCacheService _cacheService;
     private readonly ILogger<TribalWarsController> _logger;
 
-    public TribalWarsController(ITribalWarsService tribalWarsService, ILogger<TribalWarsController> logger)
+    public TribalWarsController(TribalWarsCacheService cacheService, ILogger<TribalWarsController> logger)
     {
-        _tribalWarsService = tribalWarsService;
+        _cacheService = cacheService;
         _logger = logger;
     }
 
@@ -22,7 +22,7 @@ public class TribalWarsController : ControllerBase
     public async Task<IActionResult> GetVillages([FromQuery] string market, [FromQuery] string worldName, [FromQuery] int? minPoints, [FromQuery] int? maxPoints)
     {
         var world = new World { Market = market, Name = worldName };
-        var villages = await _tribalWarsService.GetVillagesAsync(world);
+        var villages = await _cacheService.GetVillagesAsync(world);
 
         if (minPoints.HasValue)
         {
@@ -41,7 +41,7 @@ public class TribalWarsController : ControllerBase
     public async Task<IActionResult> GetBarbarianVillages([FromQuery] string market, [FromQuery] string worldName, [FromQuery] string continent)
     {
         var world = new World { Market = market, Name = worldName };
-        var barbarianVillages = await _tribalWarsService.GetBarbarianVillagesAsync(world, continent);
+        var barbarianVillages = await _cacheService.GetBarbarianVillagesAsync(world, continent);
         _logger.LogInformation($"Returning {barbarianVillages.Count()} barbarian villages for world {worldName}, continent {continent ?? "all"}");
         return Ok(barbarianVillages);
     }
@@ -50,7 +50,7 @@ public class TribalWarsController : ControllerBase
     public async Task<IActionResult> GetPlayers([FromQuery] string market, [FromQuery] string worldName)
     {
         var world = new World { Market = market, Name = worldName };
-        var players = await _tribalWarsService.GetPlayersAsync(world);
+        var players = await _cacheService.GetPlayersAsync(world);
         return Ok(players);
     }
 
@@ -58,7 +58,7 @@ public class TribalWarsController : ControllerBase
     public async Task<IActionResult> GetTribes([FromQuery] string market, [FromQuery] string worldName)
     {
         var world = new World { Market = market, Name = worldName };
-        var tribes = await _tribalWarsService.GetTribesAsync(world);
+        var tribes = await _cacheService.GetTribesAsync(world);
         return Ok(tribes);
     }
 
@@ -66,15 +66,7 @@ public class TribalWarsController : ControllerBase
     public async Task<IActionResult> GetConquers([FromQuery] string market, [FromQuery] string worldName)
     {
         var world = new World { Market = market, Name = worldName };
-        var conquers = await _tribalWarsService.GetConquersAsync(world);
+        var conquers = await _cacheService.GetConquersAsync(world);
         return Ok(conquers);
-    }
-
-    [HttpGet("killstats")]
-    public async Task<IActionResult> GetKillStats([FromQuery] string market, [FromQuery] string worldName, [FromQuery] string type)
-    {
-        var world = new World { Market = market, Name = worldName };
-        var killStats = await _tribalWarsService.GetKillStatsAsync(world, type);
-        return Ok(killStats);
     }
 }

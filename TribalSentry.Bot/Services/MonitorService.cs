@@ -39,7 +39,7 @@ namespace TribalSentry.Bot.Services
                 {
                     await CheckForVillageChangesAsync(monitor);
                 }
-                await Task.Delay(TimeSpan.FromMinutes(60), cancellationToken);
+                await Task.Delay(TimeSpan.FromMinutes(5), cancellationToken);
             }
         }
 
