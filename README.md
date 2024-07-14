@@ -1,126 +1,49 @@
 # TribalSentry
 
-TribalSentry is a comprehensive solution for monitoring Tribal Wars game data, consisting of a .NET Core Web API and a Discord bot. The API fetches and processes data from Tribal Wars game servers, while the Discord bot provides real-time notifications and management of monitoring tasks for barbarian villages.
+TribalSentry is a Discord bot designed to help Tribal Wars players monitor and track barbarian villages across multiple game worlds. It provides real-time notifications for new barbarian villages and those that have been conquered, giving players a strategic advantage in the game.
 
-## Table of Contents
+## Features
 
-- [TribalSentry API](#tribalsentry-api)
-- [TribalSentry Discord Bot](#tribalsentry-discord-bot)
-- [Installation](#installation)
-- [Usage](#usage)
-- [Contributing](#contributing)
-- [License](#license)
+- Monitor barbarian villages in multiple Tribal Wars worlds simultaneously
+- Receive instant notifications when new barbarian villages appear or are conquered
+- Filter monitoring by continent and village points
+- Easy-to-use slash commands for managing monitors
+- Support for multiple Tribal Wars markets (e.g., UK, international)
 
-## TribalSentry API
+## Commands
 
-### Features
-
-- Fetch village data, including coordinates, owner, points, and continent
-- Retrieve player information with associated tribe details
-- Get tribe (ally) data
-- Fetch barbarian villages with optional continent filtering
-- Support for different Tribal Wars markets (e.g., UK, international)
-- Case-insensitive continent matching
-- Accurate continent calculation based on village coordinates
-
-### API Endpoints
-
-- `GET /api/tribalwars/villages`: Get all villages
-- `GET /api/tribalwars/barbarian-villages`: Get barbarian villages
-- `GET /api/tribalwars/players`: Get all players
-- `GET /api/tribalwars/tribes`: Get all tribes
-
-For full details on query parameters, please refer to the API documentation.
-
-### Example Usage
-
-Fetch barbarian villages in continent K55 for the UK market, world 1:
-
-```
-GET http://localhost:5000/api/tribalwars/barbarian-villages?market=tribalwars.co.uk&worldName=uk1&continent=K55
-```
-
-## TribalSentry Discord Bot
-
-### Features
-
-- Monitor barbarian villages across multiple Tribal Wars worlds
-- Receive real-time notifications for new barbarian villages
-- Manage monitors using Discord slash commands
-- View active monitors and their settings
-- Enhanced verification process for barbarian villages
-- Rich embed messages for notifications and monitor information
-- JSON file generation for current barbarian village data
-
-### Bot Commands
-
-- `/addmonitor`: Add a new monitor for barbarian villages
-- `/updatemonitor`: Update an existing monitor
-- `/removemonitor`: Remove an existing monitor
-- `/viewmonitors`: View all active monitors with current barbarian village data
-
-For detailed usage of each command, use the Discord slash command interface.
+- `/addmonitor`: Set up a new barbarian village monitor
+- `/updatemonitor`: Modify an existing monitor's settings
+- `/removemonitor`: Stop monitoring a specific world or continent
+- `/viewmonitors`: Display all active monitors and their current data
 
 ## Installation
 
-### Prerequisites
-
-- .NET 6.0 SDK or later
-- A Discord bot token (obtain from the Discord Developer Portal)
-
-### Steps
-
-1. Clone the repository:
-   ```
-   git clone https://github.com/Johay90/TribalSentry.git
-   ```
-
-2. Navigate to the project directory:
-   ```
-   cd TribalSentry
-   ```
-
-3. Restore the NuGet packages:
-   ```
-   dotnet restore
-   ```
-
-4. Set up your Discord bot token in the `appsettings.json` file:
-   ```json
-   {
-     "Discord": {
-       "BotToken": "YOUR_BOT_TOKEN_HERE"
-     }
-   }
-   ```
+1. Invite the bot to your Discord server using [this link](https://discord.com/oauth2/authorize?client_id=1258909178114740276)
+2. Use `/addmonitor` to start monitoring barbarian villages in your desired world
 
 ## Usage
 
-### Running the API
+Here's a quick example of how to set up a monitor:
 
 ```
-dotnet run --project TribalSentry.API
+/addmonitor market:tribalwars.co.uk worldname:uk75 minpoints:300 continent:K55
 ```
 
-The API will be available at `http://localhost:5000`.
+This will monitor barbarian villages in the UK75 world, continent K55, with at least 300 points.
 
-### Running the Discord Bot
+## Self-Hosting
 
-```
-dotnet run --project TribalSentry.Bot
-```
+If you want to host the bot yourself:
 
-Ensure the API is running before starting the bot.
+1. Clone the repository: `git clone https://github.com/Johay90/TribalSentry.git`
+2. Set up your Discord bot token in `appsettings.json`
+3. Run the API: `dotnet run --project TribalSentry.API`
+4. Run the bot: `dotnet run --project TribalSentry.Bot`
 
 ## Contributing
 
 Contributions are welcome! Please feel free to submit a Pull Request.
-
-1. Fork the repository
-2. Create your feature branch (`git checkout -b feature/AmazingFeature`)
-3. Commit your changes (`git commit -m 'Add some AmazingFeature'`)
-4. Push to the branch (`git push origin feature/AmazingFeature`)
-5. Open a Pull Request
 
 ## License
 
