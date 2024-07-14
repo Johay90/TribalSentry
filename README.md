@@ -41,6 +41,10 @@ If you want to host the bot yourself:
 3. Run the API: `dotnet run --project TribalSentry.API`
 4. Run the bot: `dotnet run --project TribalSentry.Bot`
 
+## API Configuration
+
+When self-hosting, you need to configure the bot to connect to your API. In the `TribalWarsApiService.cs` file, update the `BaseAddress` to match your API's address.
+
 ## Contributing
 
 Contributions are welcome! Please feel free to submit a Pull Request.
